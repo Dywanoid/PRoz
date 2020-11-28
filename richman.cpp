@@ -1,13 +1,14 @@
 #include "richman.h"
 
 // RICHMAN STATES
-#define INITIAL 1
-#define RESTING 2
-#define LOOKING_FOR_GROUP 3
-#define IN_GROUP 4
-#define LOOKING_FOR_PORTAL 5
-#define IN_PORTAL 6
-#define IN_DIMENSION 7
+#define INITIAL 0
+#define RESTING 1
+#define LOOKING_FOR_GROUP 2
+#define IN_GROUP 3
+#define WAITING_FOR_TUNNEL 4
+#define WAITING_FOR_TUNNEL 5
+#define IN_TUNEL 6
+#define IN_PARADISE 7
 
 
 // TUNNEL STATES
@@ -16,8 +17,15 @@
 #define TO_REAL_WORLD 3
 
 // MESSAGE TYPES
-#define GREQ 1
-#define GACK 2
+#define GROUP_REQ 1
+#define GROUP_ACK 2
+#define GROUP_WHO_REQ 3
+#define GROUP_WHO_ACK 4
+#define TUNNEL_WAIT 5
+#define TUNNEL_REQ 6
+#define TUNNEL_ACK 7
+#define TRIP 8
+#define TRIP_FINISHED 9
 
 Richman::Richman(int groupSize, int tunnelCapacity, int tunnelCount) {
     this->state = INITIAL;

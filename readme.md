@@ -24,8 +24,10 @@
 3. `GROUP_WHO_REQ` - wiadomość pytająca kto jest w grupie
 4. `GROUP_WHO_ACK` - wiadomość mówiąca "jestem w grupie"
 5. `TUNNEL_WAIT` - wiadomość do członków grupy, że mogą zwolnić grupę i przejść w stan czekania na tunel
-6. `TRIP` - wiadomość mówiąca procesom, że przez dany tunel w danym kierunku przechodzi grupa
-7. `TRIP_FINISHED` - wiadomość mówiąca procesom, że trip w danym tunelu się zakończył
+6. `TUNNEL_REQ` - wiadomość wysyłana przez proces w celu ubiegania sie o miejsce w tunelu
+7. `TUNNEL_ACK` - wiadomość jako odpowiedź procesu odbierającego `TUNNEL_REQ` mowiaca o stanie tunelu (grupy w tunelu)
+8. `TRIP` - wiadomość mówiąca procesom, że przez dany tunel w danym kierunku przechodzi grupa
+9. `TRIP_FINISHED` - wiadomość mówiąca procesom, że trip w danym tunelu się zakończył
 
 
 ## Algorytm
@@ -51,7 +53,7 @@
     
 10. Jeżeli pytany proces jest szefem swojej grupy to odpowiada `TUNNEL_ACK`:
     a. jeśli jest wewnątrz tunelu to id tunelu i kierunkiem,
-    b. jeśli nie są teraz w tunelu to -1
+    b. jeśli nie są teraz w tunelu lub ma mniejszy priorytet to -1
 
 11. Proces iteruje sie po tunelach i na podstawie informacji z wiadomości `TUNNEL_ACK` określa, do którego tunelu może wejść:
     a. Jeśli jest tunel, który jest wolny lub idzie w tym samym kierunku i ma wystarczającą pojemność to zajmij je.
