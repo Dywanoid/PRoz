@@ -39,7 +39,7 @@
    
 4. Proces odbiera wiadomości `GROUP_ACK` od wszystkich procesow:
     a) `OK` jeśli proces nie ubiega się o grupę lub  ma niższy priorytet,
-    b) jeśli proces jest w grupie wstrzymaj wysyłanie `GROUP_ACK` do momentu wyjscia ze stanu `LOOKING_FOR_GROUP`
+    b) jeśli proces jest w grupie wstrzymaj wysyłanie `GROUP_ACK` do momentu wyjscia ze stanu `IN_GROUP`
 
 5. Proces dostając minimum `liczba_procesow - miejsca_w_grupie + 1` wiadomości typu `GROUP_ACK` przechodzi w stan `IN_GROUP` i wysyla wiadomość `GROUP_WHO_REQ`.
    

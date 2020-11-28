@@ -34,14 +34,17 @@ class Richman {
         int groupSize;
         std::vector<s_tunnel*> tunnels;
 
+        int group_ack_counter;
         int groupBossId;
-        int bossClock;
         std::vector<int> groupMembersIds;
 
+        std::vector<s_message*> messageQueue;
+        std::vector<int> givenAck;
         void log(std::string);
         void monitorThread();
         s_message createMessage(int, int);
         void processMessage(s_message*);
+        bool determinePriority(s_message*);
 
     public:
         Richman(int, int, int);
