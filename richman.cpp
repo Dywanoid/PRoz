@@ -41,8 +41,9 @@ Richman::Richman(int groupSize, int tunnelCapacity, int tunnelCount) {
     size = MPI::COMM_WORLD.Get_size();
 	rank = MPI::COMM_WORLD.Get_rank();
     this->groupSize = groupSize;
-    this->groupBossId = -1;
+    this->amIheBoss = false;
     this->group_ack_counter = 0;
+    this->group_who_ack_counter = 0;
 
     for (int i = 0; i < tunnelCount; i++) {
 		s_tunnel* tunnel = new s_tunnel();
@@ -78,59 +79,138 @@ s_message Richman::createMessage(int value, int type) {
     return message;
 };
 
-bool Richman::determinePriority(s_message* msg) {
-    return msg->clock < this->clock || (msg->clock == this->clock && msg->sender_id < this->rank);
+bool Richman::determinePriority(s_message msg) {
+    s_message myMsg;
+    for(s_message iMsg : this->messageQueue) {
+        if(iMsg.sender_id == this->rank) {
+            myMsg = iMsg;
+            break;
+        }
+    }
+
+    // return msg->clock < this->clock || (msg->clock == this->clock && msg->sender_id < this->rank);
+    return msg.clock < myMsg.clock || (msg.clock == myMsg.clock && msg.sender_id < myMsg.sender_id);
 }
 
-void Richman::processMessage(s_message* message) {
+void Richman::processMessage(s_message receivedMessage, bool sentManually=false) {
     switch(this->state) {
-        case LOOKING_FOR_GROUP: {
-            switch(message->type) {
+        case RESTING: {
+            switch(receivedMessage.type) {
                 case GROUP_REQ: {
-                    if(determinePriority(message)) {
-                        s_message msgToSend = this->createMessage(NO_MSG_VALUE, GROUP_ACK);
-                        MPI_Send(&msgToSend, sizeof(s_message), MPI_BYTE, message->sender_id, GROUP_ACK, MPI_COMM_WORLD);
-                        this->log("Wysylam wiadomosc o typie " + std::to_string(msgToSend.type) + " do " + colorId(message->sender_id));
-                    } else {
+                    s_message msgToSend = this->createMessage(NO_MSG_VALUE, GROUP_ACK);
+                    MPI_Send(&msgToSend, sizeof(s_message), MPI_BYTE, receivedMessage.sender_id, msgToSend.type, MPI_COMM_WORLD);
+                    this->log("Odpoczywam, wiec pozawalam: " + colorId(receivedMessage.sender_id));
+                }
+            }
 
+            break;
+        }
+        case LOOKING_FOR_GROUP: {
+            switch(receivedMessage.type) {
+                case GROUP_REQ: {
+                    bool incomingMsgHasHigherPriority = determinePriority(receivedMessage);
+                    if(incomingMsgHasHigherPriority) {
+                        s_message msgToSend = this->createMessage(NO_MSG_VALUE, GROUP_ACK);
+                        MPI_Send(&msgToSend, sizeof(s_message), MPI_BYTE, receivedMessage.sender_id, GROUP_ACK, MPI_COMM_WORLD);
+                        this->log("Wysylam wiadomosc o typie " + std::to_string(msgToSend.type) + " do " + colorId(receivedMessage.sender_id));
+                    } else {
+                        if(!sentManually) { 
+                            this->log("Dodaje " + colorId(receivedMessage.sender_id) + " do kolejki!");
+                            this->messageQueue.push_back(receivedMessage);
+                        }
                     }
                    
                     break;
                 }
                 case GROUP_ACK: {
                     this->group_ack_counter++;
-                    this->givenAck.push_back(message->sender_id);
-                    std::string xxx = "[";
-                    for(int id : this->givenAck) {
-                        xxx += colorId(id) + ",";
-                    }
-                    xxx.pop_back();
-                    xxx += "]";
-
-                    this->log(xxx);
-                    if(this->size - 1 == this->group_ack_counter) {
-                    // if(this->size - this->groupSize + 1 <= this->group_ack_counter) {
+                    if(this->size - this->groupSize == this->group_ack_counter) {
                         this->group_ack_counter = 0;
                         this->log("Mamo! Udalo sie!");
                         this->state = IN_GROUP;
+                        s_message tempMsg = this->createMessage(NO_MSG_VALUE, GROUP_WHO_REQ);
+                        this->sendToAll(tempMsg);
                     }
                     break;
-                }
-                default: {
-                    // TODO: ADD TO QUEUE
                 }
             }
 
             break;
         }
         case IN_GROUP: {
-            switch(message->type) {
+            switch(receivedMessage.type) {
                 case GROUP_REQ: {
-                    this->messageQueue.push_back(message);
+                    if(!sentManually) { 
+                        this->messageQueue.push_back(receivedMessage);
+                    }
+                    break;
+                }
+                case GROUP_WHO_REQ: {
+                    s_message msgToSend = this->createMessage(NO_MSG_VALUE, GROUP_WHO_ACK);
+                    MPI_Send(&msgToSend, sizeof(s_message), MPI_BYTE, receivedMessage.sender_id, msgToSend.type, MPI_COMM_WORLD);
+                    break;
+                }
+                case GROUP_WHO_ACK: {
+                    this->group_who_ack_counter++;
+
+                    if(this->groupSize - 1 == this->group_who_ack_counter) {
+                        this->log("I AM THE BOSS!");
+                        this->amIheBoss = true;
+                        this->state = LOOKING_FOR_TUNNEL;
+                        s_message msgToSend = this->createMessage(NO_MSG_VALUE, TUNNEL_WAIT);
+                        this->sendToAll(msgToSend);
+
+                        for(s_message msgPtr : this->messageQueue) {
+                            if(msgPtr.sender_id != this->rank) {
+                                this->log("ratowany: " + colorId(msgPtr.sender_id));
+                                this->processMessage(msgPtr, true);
+                                // this->log("Ratuje zioma"+ colorId(msgPtr->sender_id) + "!");
+                                // s_message msgToSend = this->createMessage(NO_MSG_VALUE, GROUP_ACK);
+                                // MPI_Send(&msgToSend, sizeof(s_message), MPI_BYTE, msgPtr->sender_id, msgToSend.type, MPI_COMM_WORLD);
+                            }
+                        }
+                        this->messageQueue.clear();
+                    }
+
+                    break;
+                }
+                case TUNNEL_WAIT: {
+                    this->state = WAITING_FOR_TUNNEL;
+                    this->log("Czekam na tunel!");
+                    for(s_message msgPtr : this->messageQueue) {
+                        if(msgPtr.sender_id != this->rank) {
+                            this->log("ratowany: " + colorId(msgPtr.sender_id));
+                            this->processMessage(msgPtr, true);
+                            // this->log("Ratuje zioma"+ colorId(msg->sender_id) + "!");
+                            // s_message msgToSend = this->createMessage(NO_MSG_VALUE, GROUP_ACK);
+                            // MPI_Send(&msgToSend, sizeof(s_message), MPI_BYTE, msg->sender_id, msgToSend.type, MPI_COMM_WORLD);
+                        }
+                    }
+                    this->messageQueue.clear();
                     break;
                 }
             }
 
+            break;
+        }
+        case LOOKING_FOR_TUNNEL: {
+            switch(receivedMessage.type) {
+                case GROUP_REQ: {
+                    s_message msgToSend = this->createMessage(NO_MSG_VALUE, GROUP_ACK);
+                    MPI_Send(&msgToSend, sizeof(s_message), MPI_BYTE, receivedMessage.sender_id, msgToSend.type, MPI_COMM_WORLD);
+                    break;
+                }
+            }
+            break;
+        }
+        case WAITING_FOR_TUNNEL: {
+             switch(receivedMessage.type) {
+                case GROUP_REQ: {
+                    s_message msgToSend = this->createMessage(NO_MSG_VALUE, GROUP_ACK);
+                    MPI_Send(&msgToSend, sizeof(s_message), MPI_BYTE, receivedMessage.sender_id, msgToSend.type, MPI_COMM_WORLD);
+                    break;
+                }
+            }
             break;
         }
         default: {
@@ -147,7 +227,7 @@ void Richman::monitorThread() {
 		message.type = status.MPI_TAG;
 		
         this->log("Dostalem wiadomosc typu " + std::to_string(message.type) + " od " + colorId(message.sender_id) + " value: " + std::to_string(message.value));
-		processMessage(&message);
+		processMessage(message);
 
 		this->clock_mutex.lock();
 		this->clock = std::max(this->clock, message.clock) + 1;
@@ -167,21 +247,22 @@ void Richman::monitorThread() {
 //     MPI_Send(&msg, sizeof(s_message), MPI_BYTE, randomId, 1, MPI_COMM_WORLD);
 // }
 
-void Richman::sendToAll(s_message* message) {
+void Richman::sendToAll(s_message message) {
     for (int i = 0; i < this->size; i++){
 		if (i != this->rank) {
-			MPI_Send(message, sizeof(s_message), MPI_BYTE, i, message->type, MPI_COMM_WORLD);
-            this->log("Wysylam wiadomosc o typie " + std::to_string(message->type) + " do " + colorId(i));
+			MPI_Send(&message, sizeof(s_message), MPI_BYTE, i, message.type, MPI_COMM_WORLD);
+            this->log("Wysylam wiadomosc o typie " + std::to_string(message.type) + " do " + colorId(i));
 		}
 	}
 }
 
 void Richman::beRichMan() {
     while(true) {
-		std::this_thread::sleep_for(std::chrono::milliseconds((rand()%2000) + 1000));
+		std::this_thread::sleep_for(std::chrono::milliseconds((rand()%6000) + 1000));
         this->state = LOOKING_FOR_GROUP;
         s_message message = createMessage(0, GROUP_REQ);
-        sendToAll(&message);
+        messageQueue.push_back(message);
+        sendToAll(message);
 
         while(true){}
     }

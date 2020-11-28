@@ -35,22 +35,22 @@ class Richman {
         std::vector<s_tunnel*> tunnels;
 
         int group_ack_counter;
-        int groupBossId;
+        int group_who_ack_counter;
+        bool amIheBoss;
         std::vector<int> groupMembersIds;
 
-        std::vector<s_message*> messageQueue;
-        std::vector<int> givenAck;
+        std::vector<s_message> messageQueue;
         void log(std::string);
         void monitorThread();
         s_message createMessage(int, int);
-        void processMessage(s_message*);
-        bool determinePriority(s_message*);
+        void processMessage(s_message, bool);
+        bool determinePriority(s_message);
 
     public:
         Richman(int, int, int);
         void makeMonitorThread();
         // void sendMsgToRandom();
         void beRichMan();
-        void sendToAll(s_message*);
+        void sendToAll(s_message);
 
 };
