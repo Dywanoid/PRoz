@@ -2,10 +2,10 @@
 
 ## Klasy i struktury
 1. Klasy:
-    1.1) `Richman` - proces
+    * `Richman` - proces
 2. Struktury:
-    2.1) `s_tunnel` - tunel
-    2.2) `s_message` - wiadomość
+    * `s_tunnel` - tunel
+    * `s_message` - wiadomość
 
 
 ## Stany
