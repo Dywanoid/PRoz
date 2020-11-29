@@ -3,5 +3,5 @@ echo "Compiling..."
 make
 echo "Compiling finished!"
 echo "Running..."
-mpirun -np 4 ./program
+mpirun -np 4 ./dist/program
 echo "Running finished!"
