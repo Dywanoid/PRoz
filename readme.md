@@ -39,11 +39,11 @@
    
 3. Proces wysyla wiadomości `GROUP_REQ` do wszystkich procesow.
    
-4. Proces odbiera wiadomości `GROUP_ACK` od wszystkich procesow:
-    1. `OK` jeśli proces nie ubiega się o grupę lub  ma niższy priorytet,
-    2. jeśli proces jest w grupie wstrzymaj wysyłanie `GROUP_ACK` do momentu wyjscia ze stanu `IN_GROUP`
+4. Proces odbierający wiadomość `GROUP_REQ`:
+    1. jeśli proces nie ubiega się o grupę lub  ma niższy priorytet wysyła `GROUP_ACK`,
+    2. jeśli proces jest w grupie lub ma wyższy priorytet wstrzymuje wysyłanie `GROUP_ACK`
 
-5. Proces dostając minimum `liczba_procesow - miejsca_w_grupie` wiadomości typu `GROUP_ACK` przechodzi w stan `IN_GROUP` i wysyla wiadomość `GROUP_IM_IN`.
+5. Proces wysylajacy `GROUP_REQ` dostając minimum `liczba_procesow - miejsca_w_grupie` wiadomości typu `GROUP_ACK` przechodzi w stan `IN_GROUP` i wysyla wiadomość `GROUP_IM_IN`.
    
 6. Proces, który jest w grupie i otrzymał wiadomość typu `GROUP_IM_IN` zwieksza licznik procesow w grupie. Jeśli licznik wynosi `miejsca_w_grupie - 1` to zostaje on szefem grupy. Zmienia swój stan na `LOOKING_FOR_TUNNEL` i wysyla do grupowiczow `GROUP_COMPLETED`.
    
@@ -57,23 +57,26 @@
    
 11. Proces-szef wysyla wiadomość `TUNNEL_REQ`.
     
-12. Jeżeli pytany proces jest szefem swojej grupy to odpowiada `TUNNEL_ACK`:
-    1. jeśli jest wewnątrz tunelu to id tunelu i kierunkiem,
-    2. jeśli nie są teraz w tunelu lub szuka tunelu i ma mniejszy priorytet to -1
+12. Jeżeli proces otrzymal `TUNNEL_REQ` to odpowiada `TUNNEL_ACK`:
+    1. Jeśli proces jest szefem grupy i jest wewnatrz tunelu to odpowiada ID i kierunek tunelu,
+    2. Jesli proces rowniez szuka tunelu i ma wiekszy priorytet to wstrzymuje zapytanie,
+    3. W kazdym innym wypadku proces wysyla -1
 
-13. Proces iteruje sie po tunelach i na podstawie informacji z wiadomości `TUNNEL_ACK` określa, do którego tunelu może wejść:
+13. Proces wysylajacy `TUNNEL_REQ` musi zebrac wiadomosci od wszystkich innych procesow (sprawdza to licznikiem), zeby mogl zaczac wybierac tunel.
+
+14. Proces iteruje sie po tunelach i na podstawie informacji z wiadomości `TUNNEL_ACK` określa, do którego tunelu może wejść:
     1. Jeśli jest tunel, który jest wolny lub idzie w tym samym kierunku i ma wystarczającą pojemność to zajmij je.
     2. W momencie zajęcia miejsca proces zmienia stan na `IN_TUNNEL` i wysyła wiadomość `TRIP`
     3. jeśli nie uda się zająć miejsca w żadnym z tuneli to proces czeka na wiadomość typu `TRIP_FINISHED`
 
-14. Procesy, które są w stanie `WAITING_FOR_TUNNEL` i dostają od swojego szefa wiadomość `TRIP` zmieniają stan na `IN_TUNNEL`.
+15. Procesy, które są w stanie `WAITING_FOR_TUNNEL` i dostają od swojego szefa wiadomość `TRIP` zmieniają stan na `IN_TUNNEL`.
 
-15. Szef grupy wyznacza losowy czas, który zajmie grupie podróż przez tunel.
+16. Szef grupy wyznacza losowy czas, który zajmie grupie podróż przez tunel.
 
-16. Po wyznaczonym kwancie czasu wysyła `TRIP_FINISHED` i zmienia stan na `IN_PARADISE`. Wszystie procesy z jego grupy również zmieniają swój stan na ten.
+17. Po wyznaczonym kwancie czasu wysyła `TRIP_FINISHED` i zmienia stan na `IN_PARADISE`. Wszystie procesy z jego grupy również zmieniają swój stan na `IN_PARADISE` po otrzymaniu `TRIP_FINISHED`.
     
-17. Szef znów wyzancza jakiś czas, po którym następuje wysłanie wiadomości `TUNNEL_WAIT` do grupowiczów, którzy zmieniają stan na `WAITING_FOR_TUNNEL`, a on sam zmienia stan na `LOOKING_FOR_TUNNEL`.
+18. Szef znów wyzancza jakiś czas, po którym następuje wysłanie wiadomości `TUNNEL_WAIT` do grupowiczów, którzy zmieniają stan na `WAITING_FOR_TUNNEL`, a on sam zmienia stan na `LOOKING_FOR_TUNNEL`.
     
-18. Kroki od 11 do 15 w drugą stronę (kierunek tunelu przeciwny).
+19. Kroki od 11 do 15 w drugą stronę (kierunek tunelu przeciwny).
     
-19.  Szef po upłynięciu czasu wysyła do wszystkich grupowiczów wiadomość typu `TRIP_FINISHED`. Procesy, które byly z nim w grupie (łącznie z nim samym) "resetują" się i przechodzą w stan `RESTING`.
+20.  Szef po upłynięciu czasu wysyła do wszystkich grupowiczów wiadomość typu `TRIP_FINISHED`. Procesy, które byly z nim w grupie (łącznie z nim samym) "resetują" się i przechodzą w stan `RESTING`.
