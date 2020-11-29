@@ -13,7 +13,6 @@ typedef struct {
 	int clock;
 } s_message;
 
-
 typedef struct {
 	int id; 
 	int capacity; 

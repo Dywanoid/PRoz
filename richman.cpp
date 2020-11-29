@@ -21,7 +21,7 @@
 #define GROUP_ACK 2
 #define GROUP_WHO_REQ 3
 #define GROUP_WHO_ACK 4
-#define TUNNEL_WAIT 5
+#define GROUP_COMPLETED 5
 #define TUNNEL_REQ 6
 #define TUNNEL_ACK 7
 #define TRIP 8
@@ -133,6 +133,15 @@ void Richman::processMessage(s_message receivedMessage, bool sentManually=false)
                     }
                     break;
                 }
+                case GROUP_COMPLETED: {
+                    // GROUP WAS FORMED, SO EVERYTHING HAS TO START OVER
+                    this->messageQueue.clear();
+                    this->group_ack_counter = 0;
+                    s_message message = createMessage(0, GROUP_REQ);
+                    this->messageQueue.push_back(message);
+                    this->sendToAll(message);
+                    break;
+                }
             }
 
             break;
@@ -157,35 +166,29 @@ void Richman::processMessage(s_message receivedMessage, bool sentManually=false)
                         this->log("I AM THE BOSS!");
                         this->amIheBoss = true;
                         this->state = LOOKING_FOR_TUNNEL;
-                        s_message msgToSend = this->createMessage(NO_MSG_VALUE, TUNNEL_WAIT);
+                        s_message msgToSend = this->createMessage(NO_MSG_VALUE, GROUP_COMPLETED);
                         this->sendToAll(msgToSend);
 
-                        for(s_message msgPtr : this->messageQueue) {
-                            if(msgPtr.sender_id != this->rank) {
-                                this->log("ratowany: " + colorId(msgPtr.sender_id));
-                                this->processMessage(msgPtr, true);
-                                // this->log("Ratuje zioma"+ colorId(msgPtr->sender_id) + "!");
-                                // s_message msgToSend = this->createMessage(NO_MSG_VALUE, GROUP_ACK);
-                                // MPI_Send(&msgToSend, sizeof(s_message), MPI_BYTE, msgPtr->sender_id, msgToSend.type, MPI_COMM_WORLD);
-                            }
-                        }
+                        // for(s_message msgPtr : this->messageQueue) {
+                        //     if(msgPtr.sender_id != this->rank) {
+                        //         this->log("ratowany: " + colorId(msgPtr.sender_id));
+                        //         this->processMessage(msgPtr, true);
+                        //     }
+                        // }
                         this->messageQueue.clear();
                     }
 
                     break;
                 }
-                case TUNNEL_WAIT: {
+                case GROUP_COMPLETED: {
                     this->state = WAITING_FOR_TUNNEL;
                     this->log("Czekam na tunel!");
-                    for(s_message msgPtr : this->messageQueue) {
-                        if(msgPtr.sender_id != this->rank) {
-                            this->log("ratowany: " + colorId(msgPtr.sender_id));
-                            this->processMessage(msgPtr, true);
-                            // this->log("Ratuje zioma"+ colorId(msg->sender_id) + "!");
-                            // s_message msgToSend = this->createMessage(NO_MSG_VALUE, GROUP_ACK);
-                            // MPI_Send(&msgToSend, sizeof(s_message), MPI_BYTE, msg->sender_id, msgToSend.type, MPI_COMM_WORLD);
-                        }
-                    }
+                    // for(s_message msgPtr : this->messageQueue) {
+                    //     if(msgPtr.sender_id != this->rank) {
+                    //         this->log("ratowany: " + colorId(msgPtr.sender_id));
+                    //         this->processMessage(msgPtr, true);
+                    //     }
+                    // }
                     this->messageQueue.clear();
                     break;
                 }
