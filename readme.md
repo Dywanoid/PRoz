@@ -32,7 +32,7 @@
 4. Jeżeli proces otrzymal `TUNNEL_REQ` to odpowiada `TUNNEL_ACK`:
     1. Jeśli proces jest wewnątrz tunelu to odpowiada ID, kierunkiem i pojemnością tunelu,
     2. Jeśli proces również szuka tunelu i ma większy priorytet to wstrzymuje zapytanie,
-    3. W kazdym innym wypadku proces wysyła -1
+    3. W kazdym innym wypadku proces wysyła id tunelu -1
 
 5. Proces wysyłający `TUNNEL_REQ` musi zebrać wiadomości od wszystkich innych procesów, żeby mógł zacząć wybierać tunel.
 

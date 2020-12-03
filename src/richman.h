@@ -8,7 +8,9 @@
 
 typedef struct {
 	int type;
-	int value;
+	int tunnel_id;
+    int taken_capacity;
+    int direction;
 	int sender_id;
 	int clock;
 } s_message;
@@ -16,40 +18,55 @@ typedef struct {
 typedef struct {
 	int id; 
 	int capacity; 
+    int capacityTaken;
     int direction;
 	std::vector<int> richmanIds;
 } s_tunnel;
 
+typedef struct {
+    int type;
+    const char* name;
+} s_type;
+
 class Richman {
     private:
+        // MPI RELATED
+        int size;
+        int rank;
+
+        // PROCESS RELATED
         int state;
+        std::mutex state_mutex;
 
         int clock;
         std::mutex clock_mutex;
 
-        int size;
-        int rank;
+        std::vector<int> otherProcessesClocks;
 
+        std::vector<s_message> currentRequests;
+        int tunnelAckCounter;
+
+        // PROJECT RELATED
         int groupSize;
         std::vector<s_tunnel*> tunnels;
+        std::mutex tunnels_mutex;
 
-        int group_ack_counter;
-        int group_who_ack_counter;
-        bool amIheBoss;
-        std::vector<int> groupMembersIds;
+        int currentDirection;
+        int currentTunnelId;
 
-        std::vector<s_message> messageQueue;
+        // METHODS
         void log(std::string);
         void monitorThread();
-        s_message createMessage(int, int);
+        s_message createMessage(int, int, int, int);
         void processMessage(s_message, bool);
-        bool determinePriority(s_message);
-
+        bool doesReceivedMessageHavePriority(s_message);
+        void removeRichManFromTunnel(s_message);
+        void updateOrAddRichManToTunnel(s_message);
+        void rest();
+        void makeMonitorThread();
+        void sendToAll(s_message);
+        void setState(int);
     public:
         Richman(int, int, int);
-        void makeMonitorThread();
-        // void sendMsgToRandom();
         void beRichMan();
-        void sendToAll(s_message);
-
 };
