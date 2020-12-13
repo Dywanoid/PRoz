@@ -4,7 +4,7 @@
 
 #define MAX_GROUP_SIZE 8
 #define TUNNEL_CAPACITY 8
-#define TUNNELS_COUNT 2
+#define TUNNELS_COUNT 3
 
 int main(int argc, char **argv) {
 	MPI::Init_thread(MPI_THREAD_MULTIPLE);

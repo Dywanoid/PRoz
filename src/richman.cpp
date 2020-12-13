@@ -34,13 +34,15 @@ Richman::Richman(int maxGroupSize, int tunnelCapacity, int tunnelCount) {
 
     size = MPI::COMM_WORLD.Get_size();
 	rank = MPI::COMM_WORLD.Get_rank();
+    srand(time(NULL) + this->rank);
 
     this->tunnelAckCounter = 0;
+
     this->groupSize = rand()%(maxGroupSize-4) + 4;
+    this->log("my group size: " +std::to_string(this->groupSize));
     this->currentDirection = TO_PARADISE;
     this->currentTunnelId = -1;
 
-    tunnels_mutex.lock();
     for (int i = 0; i < tunnelCount; i++) {
 		s_tunnel* tunnel = new s_tunnel();
 		tunnel->id = i;
@@ -49,7 +51,6 @@ Richman::Richman(int maxGroupSize, int tunnelCapacity, int tunnelCount) {
 		tunnel->direction = BOTH_WAYS;
 		this->tunnels.push_back(tunnel);
 	}
-    tunnels_mutex.unlock();
 
     this->otherProcessesClocks = std::vector<int>(size, 0);
 
@@ -89,18 +90,8 @@ s_message Richman::createMessage(int type, int tunnel_id=NO_MSG_VALUE, int capac
     return message;
 };
 
-bool Richman::doesReceivedMessageHavePriority(s_message receivedMessage) {
-    s_message myMsg;
-
-    //TODO: maybe don't store my request in this vector and do it separately?
-    for(s_message iterMsg : this->currentRequests) {
-        if(iterMsg.sender_id == this->rank) {
-            myMsg = iterMsg;
-            break;
-        }
-    }
-
-    return receivedMessage.clock < myMsg.clock || (receivedMessage.clock == myMsg.clock && receivedMessage.sender_id < myMsg.sender_id);
+bool Richman::doesReceivedMessageHaveHigherPriority(s_message receivedMessage) {
+    return receivedMessage.clock < this->myMsg.clock || (receivedMessage.clock == this->myMsg.clock && receivedMessage.sender_id < this->myMsg.sender_id);
 }
 
 void Richman::processMessage(s_message receivedMessage, bool sentManually=false) {
@@ -112,13 +103,16 @@ void Richman::processMessage(s_message receivedMessage, bool sentManually=false)
         }
         case TRIP_FINISHED: {
             this->removeRichManFromTunnel(receivedMessage);
-            if(this->tunnelAckCounter == (size - 1)) {
+            this->tunnel_ack_mutex.lock();
+            bool canChooseTunnel = this->tunnelAckCounter == (size - 1);
+            this->tunnel_ack_mutex.unlock();
+
+            if(canChooseTunnel) {
                 tunnels_mutex.lock();
                 for(s_tunnel* t : this->tunnels) {
                     bool directionRequirement = t->direction == BOTH_WAYS || t->direction == this->currentDirection;
                     bool capacityRequirement = (t->capacity - t->capacityTaken) >= this->groupSize;
                     if(directionRequirement && capacityRequirement) {
-                        this->log("I("+std::to_string(this->groupSize)+") have chosen tunnnel id: " + std::to_string(t->id));
                         this->currentTunnelId = t->id;
                         t->capacityTaken += this->groupSize;
                         t->direction = this->currentDirection;
@@ -128,15 +122,15 @@ void Richman::processMessage(s_message receivedMessage, bool sentManually=false)
                         s_message message = createMessage(TRIP, this->currentTunnelId, this->groupSize, this->currentDirection);
                         sendToAll(message);
                         for(s_message msg : this->currentRequests) {
-                            if(msg.sender_id != this->rank) {
-                                s_message message = this->createMessage(TUNNEL_ACK, this->currentTunnelId, this->groupSize, this->currentDirection);
-                                MPI_Send(&message, sizeof(s_message), MPI_BYTE, msg.sender_id, message.type, MPI_COMM_WORLD);
-                                this->log("Wysylam wiadomosc o typie " + typeMap[message.type] + " do " + colorId(msg.sender_id));
-                            }
+                            s_message message = this->createMessage(TUNNEL_ACK, this->currentTunnelId, this->groupSize, this->currentDirection);
+                            this->sendMessage(message, msg.sender_id);                            
                         }
 
                         this->currentRequests.clear();
-
+                        this->tunnel_ack_mutex.lock();
+                        this->tunnelAckCounter = 0;
+                        this->temporary_ack_list.clear();
+                        this->tunnel_ack_mutex.unlock();
                         this->setState(IN_TUNNEL);
                         break;
                     }
@@ -153,8 +147,7 @@ void Richman::processMessage(s_message receivedMessage, bool sentManually=false)
             switch(receivedMessage.type) {
                 case TUNNEL_REQ: {
                     s_message message = this->createMessage(TUNNEL_ACK);
-                    MPI_Send(&message, sizeof(s_message), MPI_BYTE, receivedMessage.sender_id, message.type, MPI_COMM_WORLD);
-                    this->log("Wysylam wiadomosc o typie " + typeMap[message.type] + " do " + colorId(receivedMessage.sender_id));
+                    this->sendMessage(message, receivedMessage.sender_id);
                     break;
                 }
             }
@@ -163,32 +156,44 @@ void Richman::processMessage(s_message receivedMessage, bool sentManually=false)
         case LOOKING_FOR_TUNNEL: {
             switch(receivedMessage.type) {
                 case TUNNEL_REQ: {
-                    if(this->doesReceivedMessageHavePriority(receivedMessage)) {
+                    if(this->doesReceivedMessageHaveHigherPriority(receivedMessage)) {
                         s_message message = this->createMessage(TUNNEL_ACK);
-                        MPI_Send(&message, sizeof(s_message), MPI_BYTE, receivedMessage.sender_id, message.type, MPI_COMM_WORLD);
-                        this->log("Wysylam wiadomosc o typie " + typeMap[message.type] + " do " + colorId(receivedMessage.sender_id));
+                        this->sendMessage(message, receivedMessage.sender_id);
                     } else {
                         this->currentRequests.push_back(receivedMessage);
+
+                        std::string xxx = "Czekaja na odpowiedz: ";
+                        for(auto x : this->currentRequests) {
+                            xxx +=  std::to_string(x.sender_id) + ",";
+                        }
+                        this->log(xxx);
                     }
                    
                     break;
                 }
                 case TUNNEL_ACK: {
+                    this->tunnel_ack_mutex.lock();
                     this->tunnelAckCounter++;
+                    this->temporary_ack_list.push_back(receivedMessage.sender_id);
+                    bool canChooseTunnel = this->tunnelAckCounter == (size - 1);
+                    this->tunnel_ack_mutex.unlock();
+
+                    std::string xxx = "Pozwolenie od: ";
+                    for(auto x : this->temporary_ack_list) {
+                        xxx += std::to_string(x) + ",";
+                    }
+                    this->log(xxx);
 
                     if(receivedMessage.tunnel_id != NO_MSG_VALUE) {
                        this->updateOrAddRichManToTunnel(receivedMessage);
                     }
 
-                    if(this->tunnelAckCounter == (size - 1)) {
-                        this->log("I have tunnel choosing power!");
-
+                    if(canChooseTunnel) {
                         tunnels_mutex.lock();
                         for(s_tunnel* t : this->tunnels) {
                             bool directionRequirement = t->direction == BOTH_WAYS || t->direction == this->currentDirection;
                             bool capacityRequirement = (t->capacity - t->capacityTaken) >= this->groupSize;
                             if(directionRequirement && capacityRequirement) {
-                                this->log("I("+std::to_string(this->groupSize)+") have chosen tunnnel id: " + std::to_string(t->id));
                                 this->currentTunnelId = t->id;
                                 t->capacityTaken += this->groupSize;
                                 t->direction = this->currentDirection;
@@ -198,15 +203,15 @@ void Richman::processMessage(s_message receivedMessage, bool sentManually=false)
                                 s_message message = createMessage(TRIP, this->currentTunnelId, this->groupSize, this->currentDirection);
                                 sendToAll(message);
                                 for(s_message msg : this->currentRequests) {
-                                    if(msg.sender_id != this->rank) {
-                                        s_message message = this->createMessage(TUNNEL_ACK, this->currentTunnelId, this->groupSize, this->currentDirection);
-                                        MPI_Send(&message, sizeof(s_message), MPI_BYTE, msg.sender_id, message.type, MPI_COMM_WORLD);
-                                        this->log("Wysylam wiadomosc o typie " + typeMap[message.type] + " do " + colorId(msg.sender_id));
-                                    }
+                                    s_message message = this->createMessage(TUNNEL_ACK, this->currentTunnelId, this->groupSize, this->currentDirection);
+                                    this->sendMessage(message, msg.sender_id);                                    
                                 }
 
                                 this->currentRequests.clear();
-
+                                this->tunnel_ack_mutex.lock();
+                                this->tunnelAckCounter = 0;
+                                this->temporary_ack_list.clear();
+                                this->tunnel_ack_mutex.unlock();
                                 this->setState(IN_TUNNEL);
                                 break;
                             }
@@ -222,14 +227,10 @@ void Richman::processMessage(s_message receivedMessage, bool sentManually=false)
             switch(receivedMessage.type) {
                 case TUNNEL_REQ: {
                     s_message message = this->createMessage(TUNNEL_ACK, this->currentTunnelId, this->groupSize, this->currentDirection);
-                    MPI_Send(&message, sizeof(s_message), MPI_BYTE, receivedMessage.sender_id, message.type, MPI_COMM_WORLD);
-                    this->log("Wysylam wiadomosc o typie " + typeMap[message.type] + " do " + colorId(receivedMessage.sender_id));
+                    this->sendMessage(message, receivedMessage.sender_id);
                 }
             }
             break;
-        }
-        default: {
-            this->log("Stan nie ma obsługi!");
         }
     }
 };
@@ -252,11 +253,15 @@ void Richman::monitorThread() {
 	}
 }
 
+void Richman::sendMessage(s_message message, int toWho) {
+    MPI_Send(&message, sizeof(s_message), MPI_BYTE, toWho, message.type, MPI_COMM_WORLD);
+    this->log("Wysylam wiadomosc o typie " + typeMap[message.type] + " do " + colorId(toWho));
+}
+
 void Richman::sendToAll(s_message message) {
     for (int i = 0; i < this->size; i++){
 		if (i != this->rank) {
-			MPI_Send(&message, sizeof(s_message), MPI_BYTE, i, message.type, MPI_COMM_WORLD);
-            this->log("Wysylam wiadomosc o typie " + typeMap[message.type] + " do " + colorId(i));
+            this->sendMessage(message, i);
 		}
 	}
 }
@@ -311,41 +316,61 @@ void Richman::beRichMan() {
         this->setState(LOOKING_FOR_TUNNEL);
 
         // TUNNEL ACTION STARTS HERE
+        this->log("Im looking for tunnel to paradise!");
+
         message = createMessage(TUNNEL_REQ);
-        this->currentRequests.push_back(message);
+        // this->currentRequests.push_back(message);
+        this->myMsg = message;
         sendToAll(message);
 
         // TEMPORARY STOP
-        while(this->state != IN_TUNNEL){}
+        while(this->state != IN_TUNNEL){
+            std::this_thread::sleep_for(std::chrono::milliseconds((rand()%15) + 10));
+        }
+        this->log("Im traveling to paradise!");
         std::this_thread::sleep_for(std::chrono::milliseconds((rand()%3000) + 2000));
+
         message = createMessage(TRIP_FINISHED, this->currentTunnelId, this->groupSize, this->currentDirection);
         removeRichManFromTunnel(message);
         this->currentDirection = TO_REAL_WORLD;
-        this->log("I left tunnel id: " + std::to_string(this->currentTunnelId));
         this->currentTunnelId = -1;
         sendToAll(message);
         this->setState(IN_PARADISE);
+        this->log("Im in paradise!");
         std::this_thread::sleep_for(std::chrono::milliseconds((rand()%3000) + 1000));
+        this->setState(LOOKING_FOR_TUNNEL);
+        this->log("Im looking for tunnel to real world!");
+
         message = createMessage(TUNNEL_REQ);
-        this->currentRequests.push_back(message);
+        // this->currentRequests.push_back(message);
+        this->myMsg = message;
+
         sendToAll(message);
 
         // TEMPORARY STOP
-        while(this->state != IN_TUNNEL){}
+        while(this->state != IN_TUNNEL){
+            std::this_thread::sleep_for(std::chrono::milliseconds((rand()%15) + 10));
+        }
+        this->log("Im traveling to real world!");
+
         std::this_thread::sleep_for(std::chrono::milliseconds((rand()%3000) + 2000));
+
         message = createMessage(TRIP_FINISHED, this->currentTunnelId, this->groupSize, this->currentDirection);
         removeRichManFromTunnel(message);
         this->currentDirection = TO_PARADISE;
         this->currentTunnelId = -1;
     
         sendToAll(message);
-        this->rest();
     }
 }
 
 void Richman::rest() {
     this->setState(RESTING);
+    this->log("Im in real world!");
+    this->tunnel_ack_mutex.lock();
     this->tunnelAckCounter = 0;
+    this->temporary_ack_list.clear();
+    this->tunnel_ack_mutex.unlock();
     std::this_thread::sleep_for(std::chrono::milliseconds((rand()%3000) + 1000));
 
 }

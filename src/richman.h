@@ -4,6 +4,7 @@
 #include <thread>
 #include <stdio.h>
 #include <string>
+#include <stdlib.h>
 #include <mpi.h>
 
 typedef struct {
@@ -44,7 +45,10 @@ class Richman {
         std::vector<int> otherProcessesClocks;
 
         std::vector<s_message> currentRequests;
+        s_message myMsg;
         int tunnelAckCounter;
+        std::vector<int> temporary_ack_list;
+        std::mutex tunnel_ack_mutex;
 
         // PROJECT RELATED
         int groupSize;
@@ -59,11 +63,12 @@ class Richman {
         void monitorThread();
         s_message createMessage(int, int, int, int);
         void processMessage(s_message, bool);
-        bool doesReceivedMessageHavePriority(s_message);
+        bool doesReceivedMessageHaveHigherPriority(s_message);
         void removeRichManFromTunnel(s_message);
         void updateOrAddRichManToTunnel(s_message);
         void rest();
         void makeMonitorThread();
+        void sendMessage(s_message, int);
         void sendToAll(s_message);
         void setState(int);
     public:
