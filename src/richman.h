@@ -44,10 +44,9 @@ class Richman {
 
         std::vector<int> otherProcessesClocks;
 
-        std::vector<s_message> currentRequests;
+        std::vector<s_message> heldRequests;
         s_message myMsg;
         int tunnelAckCounter;
-        std::vector<int> temporary_ack_list;
         std::mutex tunnel_ack_mutex;
 
         // PROJECT RELATED
@@ -67,6 +66,7 @@ class Richman {
         void removeRichManFromTunnel(s_message);
         void updateOrAddRichManToTunnel(s_message);
         void rest();
+        void chooseTunnel();
         void makeMonitorThread();
         void sendMessage(s_message, int);
         void sendToAll(s_message);
