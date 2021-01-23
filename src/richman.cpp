@@ -103,8 +103,9 @@ void Richman::chooseTunnel() {
             t->richmanIds.push_back(this->rank);
 
 
-            s_message message = createMessage(TRIP, this->currentTunnelId, this->groupSize, this->currentDirection);
-            sendToAll(message);
+
+            s_message message = this->createMessage(TRIP, this->currentTunnelId, this->groupSize, this->currentDirection);
+            this->sendToAll(message);
 
             for(s_message request : this->heldRequests) {
                 s_message message = this->createMessage(TUNNEL_ACK, this->currentTunnelId, this->groupSize, this->currentDirection);
@@ -207,7 +208,7 @@ void Richman::monitorThread() {
         this->log("Dostalem wiadomosc od " + colorId(message.sender_id) +" typu " + typeMap[message.type] + "("+std::to_string(message.tunnel_id)+"|"+std::to_string(message.taken_capacity)+"|"+std::to_string(message.direction)+")");
         this->otherProcessesClocks[message.sender_id] = message.clock;
 
-        processMessage(message);
+        this->processMessage(message);
 
 		this->clock_mutex.lock();
 		this->clock = std::max(this->clock, message.clock) + 1;
@@ -278,9 +279,9 @@ void Richman::beRichMan() {
         this->setState(LOOKING_FOR_TUNNEL);
         this->log("Im looking for tunnel to paradise!");
 
-        message = createMessage(TUNNEL_REQ);
+        message = this->createMessage(TUNNEL_REQ);
         this->myMsg = message;
-        sendToAll(message);
+        this->sendToAll(message);
 
         // TEMPORARY STOP
         while(this->state != IN_TUNNEL){
@@ -290,11 +291,15 @@ void Richman::beRichMan() {
         this->log("Im traveling to paradise!");
         std::this_thread::sleep_for(std::chrono::milliseconds((rand()%3000) + 2000));
 
-        message = createMessage(TRIP_FINISHED, this->currentTunnelId, this->groupSize, this->currentDirection);
-        removeRichManFromTunnel(message);
+        while(this->tunnels[this->currentTunnelId]->richmanIds[0] != this->rank) {
+            std::this_thread::sleep_for(std::chrono::milliseconds((rand()%15) + 10));
+        }
+
+        message = this->createMessage(TRIP_FINISHED, this->currentTunnelId, this->groupSize, this->currentDirection);
+        this->removeRichManFromTunnel(message);
         this->currentDirection = TO_REAL_WORLD;
         this->currentTunnelId = -1;
-        sendToAll(message);
+        this->sendToAll(message);
 
         this->setState(IN_PARADISE);
         this->log("Im in paradise!");
@@ -303,9 +308,9 @@ void Richman::beRichMan() {
         this->setState(LOOKING_FOR_TUNNEL);
         this->log("Im looking for tunnel to real world!");
 
-        message = createMessage(TUNNEL_REQ);
+        message = this->createMessage(TUNNEL_REQ);
         this->myMsg = message;
-        sendToAll(message);
+        this->sendToAll(message);
 
         // TEMPORARY STOP
         while(this->state != IN_TUNNEL){
@@ -315,12 +320,16 @@ void Richman::beRichMan() {
         this->log("Im traveling to real world!");
         std::this_thread::sleep_for(std::chrono::milliseconds((rand()%3000) + 2000));
 
-        message = createMessage(TRIP_FINISHED, this->currentTunnelId, this->groupSize, this->currentDirection);
-        removeRichManFromTunnel(message);
+        while(this->tunnels[this->currentTunnelId]->richmanIds[0] != this->rank) {
+            std::this_thread::sleep_for(std::chrono::milliseconds((rand()%15) + 10));
+        }
+
+        message = this->createMessage(TRIP_FINISHED, this->currentTunnelId, this->groupSize, this->currentDirection);
+        this->removeRichManFromTunnel(message);
         this->currentDirection = TO_PARADISE;
         this->currentTunnelId = -1;
     
-        sendToAll(message);
+        this->sendToAll(message);
     }
 }
 

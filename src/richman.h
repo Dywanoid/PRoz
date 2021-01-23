@@ -24,11 +24,6 @@ typedef struct {
 	std::vector<int> richmanIds;
 } s_tunnel;
 
-typedef struct {
-    int type;
-    const char* name;
-} s_type;
-
 class Richman {
     private:
         // MPI RELATED
