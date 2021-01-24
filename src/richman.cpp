@@ -37,6 +37,10 @@ Richman::Richman(int maxGroupSize, int tunnelCapacity, int tunnelCount) {
     this->tunnelAckCounter = 0;
 
     this->groupSize = rand()%(maxGroupSize-2) + 2;
+    if(this->groupSize > maxGroupSize) {
+        this->groupSize = maxGroupSize;
+    }
+
     this->log("my group size: " +std::to_string(this->groupSize));
     this->currentDirection = TO_PARADISE;
     this->currentTunnelId = -1;

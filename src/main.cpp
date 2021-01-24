@@ -2,9 +2,9 @@
 #include <mpi.h>
 #include "richman.h"
 
-#define MAX_GROUP_SIZE 8
-#define TUNNEL_CAPACITY 8
-#define TUNNELS_COUNT 3
+#define MAX_GROUP_SIZE 1
+#define TUNNEL_CAPACITY 2
+#define TUNNELS_COUNT 2
 
 int main(int argc, char **argv) {
     int groupSize = MAX_GROUP_SIZE;
